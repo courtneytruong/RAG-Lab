@@ -1,0 +1,19 @@
+{
+  "name": "javascript-langchain-agent",
+  "version": "1.0.0",
+  "description": "AI Agent using JavaScript and LangChain",
+  "main": "app.js",
+  "type": "module",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "keywords": ["ai", "agent", "langchain", "openai"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "langchain": "^0.3.0",
+    "@langchain/openai": "^0.3.0",
+    "@langchain/community": "^0.3.0",
+    "dotenv": "^16.4.5"
+  }
+}
