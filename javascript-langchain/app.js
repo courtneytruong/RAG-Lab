@@ -29,7 +29,7 @@ function cosineSimilarity(vectorA, vectorB) {
 async function main() {
   console.log("🤖 JavaScript LangChain Agent Starting...\n");
 
-  // Check for GitHub token
+  // Debug: Print GITHUB_TOKEN status
   if (!process.env.GITHUB_TOKEN) {
     console.error("❌ Error: GITHUB_TOKEN not found in environment variables.");
     console.log("Please create a .env file with your GitHub token:");
@@ -37,16 +37,37 @@ async function main() {
     console.log("\nGet your token from: https://github.com/settings/tokens");
     console.log("Or use GitHub Models: https://github.com/marketplace/models");
     process.exit(1);
+  } else {
+    console.log(
+      "✅ GITHUB_TOKEN loaded. Length:",
+      process.env.GITHUB_TOKEN.length,
+    );
+    // Uncomment the next line to print the token value (for debugging only, do not share this!)
+    // console.log("Token:", process.env.GITHUB_TOKEN);
   }
 
-  // Initialize the embedding model with GitHub Models
-  const embeddings = new OpenAIEmbeddings({
-    modelName: "text-embedding-3-small",
-    configuration: {
-      baseURL: "https://models.inference.ai.azure.com",
-      apiKey: process.env.GITHUB_TOKEN,
-    },
-  });
+  // Function to call GitHub Models Embedding API directly
+  async function fetchGithubEmbedding(text) {
+    const url = "https://models.github.ai/inference/embeddings";
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "text-embedding-3-small",
+        input: text,
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`GitHub Models API error: ${response.status} ${err}`);
+    }
+    const data = await response.json();
+    // The API returns { data: [{ embedding: [...] }] }
+    return data.data[0].embedding;
+  }
 
   console.log("=== Embedding Inspector Lab ===\n");
   console.log("Generating embeddings for three sentences...\n");
@@ -55,34 +76,46 @@ async function main() {
   const sentences = [
     "The canine barked loudly.",
     "The dog made a noise.",
-    "The electron spins rapidly."
+    "The electron spins rapidly.",
   ];
 
-  // Generate and display embeddings for each sentence
+  // Generate and display embeddings for each sentence using GitHub Models API
   const vectors = [];
   for (let i = 0; i < sentences.length; i++) {
     console.log(`Sentence ${i + 1}: "${sentences[i]}"`);
-    
-    // Generate embedding
-    const embedding = await embeddings.embedQuery(sentences[i]);
+    const embedding = await fetchGithubEmbedding(sentences[i]);
     vectors.push(embedding);
   }
 
-  // Show the distances between the embeddings
+  // Show the cosine similarities between the embeddings
   console.log("\n=== Embedding Vectors ===\n");
-  for (let i = 0; i < vectors.length; i++) {
-    const current = i;
-    const next = (i + 1) % vectors.length;
-    const similarity = cosineSimilarity(vectors[current], vectors[next]);
-    console.log(`Cosine similarity between Sentence ${current + 1} and Sentence ${next + 1}: ${similarity.toFixed(4)}`);
-  }
+  const sim12 = cosineSimilarity(vectors[0], vectors[1]);
+  const sim23 = cosineSimilarity(vectors[1], vectors[2]);
+  const sim31 = cosineSimilarity(vectors[2], vectors[0]);
+  console.log(
+    `Cosine similarity between Sentence 1 and Sentence 2: ${sim12.toFixed(4)}`,
+  );
+  console.log(
+    `Cosine similarity between Sentence 2 and Sentence 3: ${sim23.toFixed(4)}`,
+  );
+  console.log(
+    `Cosine similarity between Sentence 3 and Sentence 1: ${sim31.toFixed(4)}`,
+  );
 
   console.log("\n📊 Observations:");
   console.log("- Each embedding is just an array of floating-point numbers");
-  console.log("- Sentences 1 and 2 (about dogs) will have similar values in many dimensions");
-  console.log("- Sentence 3 (about electrons) will differ significantly from sentences 1 and 2");
-  console.log("\nThis demonstrates that 'AI embeddings' are simply numerical vectors,");
-  console.log("not magic—they represent semantic meaning as coordinates in high-dimensional space.");
+  console.log(
+    "- Sentences 1 and 2 (about dogs) will have similar values in many dimensions",
+  );
+  console.log(
+    "- Sentence 3 (about electrons) will differ significantly from sentences 1 and 2",
+  );
+  console.log(
+    "\nThis demonstrates that 'AI embeddings' are simply numerical vectors,",
+  );
+  console.log(
+    "not magic—they represent semantic meaning as coordinates in high-dimensional space.",
+  );
 }
 
 main().catch(console.error);
