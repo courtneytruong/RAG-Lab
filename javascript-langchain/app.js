@@ -100,6 +100,18 @@ async function main() {
     "The canine barked loudly.",
     "The dog made a noise.",
     "The electron spins rapidly.",
+    "I love eating pizza with extra cheese.",
+    "The basketball player scored a three-pointer.",
+    "Rain is forecasted for tomorrow afternoon.",
+    "JavaScript is a popular programming language.",
+    "The kitten purred softly on the couch.",
+    "Quantum mechanics explains particle behavior.",
+    "Homemade pasta tastes better than store-bought.",
+    "The soccer match ended in a tie.",
+    "Clouds are forming over the mountains.",
+    "TypeScript adds types to JavaScript.",
+    "Puppies need lots of attention and exercise.",
+    "Atoms are made of protons, neutrons, and electrons.",
   ];
 
   // Prepare documents with metadata
