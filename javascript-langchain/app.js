@@ -1,4 +1,6 @@
 import { OpenAIEmbeddings } from "@langchain/openai";
+import { MemoryVectorStore } from "langchain/vectorstores/memory";
+import readline from "readline";
 import dotenv from "dotenv";
 
 // Load environment variables
@@ -27,6 +29,17 @@ function cosineSimilarity(vectorA, vectorB) {
 }
 
 async function main() {
+  // Function to search sentences in the vector store
+  async function searchSentences(vectorStore, query, k = 3) {
+    const results = await vectorStore.similaritySearchWithScore(query, k);
+    console.log(`\n🔍 Top ${k} results for query: "${query}"`);
+    results.forEach(([doc, score], idx) => {
+      console.log(
+        `#${idx + 1} | Score: ${score.toFixed(4)} | Sentence: "${doc.pageContent}"`,
+      );
+    });
+    return results;
+  }
   console.log("🤖 JavaScript LangChain Agent Starting...\n");
 
   // Debug: Print GITHUB_TOKEN status
@@ -69,53 +82,76 @@ async function main() {
     return data.data[0].embedding;
   }
 
+  // Use a plain object for embeddings compatible with MemoryVectorStore
+  const embeddings = {
+    embedQuery: fetchGithubEmbedding,
+    embedDocuments: async (texts) =>
+      Promise.all(texts.map(fetchGithubEmbedding)),
+  };
+
+  // Create a MemoryVectorStore instance with no initial texts
+  const vectorStore = await MemoryVectorStore.fromTexts([], [], embeddings);
+
   console.log("=== Embedding Inspector Lab ===\n");
   console.log("Generating embeddings for three sentences...\n");
 
-  // Define the three test sentences
+  // Define the three test sentences (same as Lab 1)
   const sentences = [
     "The canine barked loudly.",
     "The dog made a noise.",
     "The electron spins rapidly.",
   ];
 
-  // Generate and display embeddings for each sentence using GitHub Models API
-  const vectors = [];
-  for (let i = 0; i < sentences.length; i++) {
-    console.log(`Sentence ${i + 1}: "${sentences[i]}"`);
-    const embedding = await fetchGithubEmbedding(sentences[i]);
-    vectors.push(embedding);
+  // Prepare documents with metadata
+  const now = new Date().toISOString();
+  const docs = sentences.map((sentence, idx) => ({
+    pageContent: sentence,
+    metadata: {
+      createdAt: now,
+      index: idx,
+    },
+  }));
+
+  // Add all documents to the vector store at once
+  await vectorStore.addDocuments(docs);
+
+  // Print confirmation and each sentence
+  console.log(`\n✅ Stored ${docs.length} sentences in the vector store.`);
+  docs.forEach((doc, i) => {
+    console.log(`Sentence ${i + 1}: "${doc.pageContent}"`);
+  });
+
+  // === Semantic Search Interactive Loop ===
+  console.log("\n=== Semantic Search ===");
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  // Promisified question for async/await
+  function askQuestion(query) {
+    return new Promise((resolve) => rl.question(query, resolve));
   }
 
-  // Show the cosine similarities between the embeddings
-  console.log("\n=== Embedding Vectors ===\n");
-  const sim12 = cosineSimilarity(vectors[0], vectors[1]);
-  const sim23 = cosineSimilarity(vectors[1], vectors[2]);
-  const sim31 = cosineSimilarity(vectors[2], vectors[0]);
-  console.log(
-    `Cosine similarity between Sentence 1 and Sentence 2: ${sim12.toFixed(4)}`,
-  );
-  console.log(
-    `Cosine similarity between Sentence 2 and Sentence 3: ${sim23.toFixed(4)}`,
-  );
-  console.log(
-    `Cosine similarity between Sentence 3 and Sentence 1: ${sim31.toFixed(4)}`,
-  );
-
-  console.log("\n📊 Observations:");
-  console.log("- Each embedding is just an array of floating-point numbers");
-  console.log(
-    "- Sentences 1 and 2 (about dogs) will have similar values in many dimensions",
-  );
-  console.log(
-    "- Sentence 3 (about electrons) will differ significantly from sentences 1 and 2",
-  );
-  console.log(
-    "\nThis demonstrates that 'AI embeddings' are simply numerical vectors,",
-  );
-  console.log(
-    "not magic—they represent semantic meaning as coordinates in high-dimensional space.",
-  );
+  while (true) {
+    const userInput = (
+      await askQuestion("Enter a search query (or 'quit' to exit): ")
+    ).trim();
+    if (
+      userInput.toLowerCase() === "quit" ||
+      userInput.toLowerCase() === "exit"
+    ) {
+      break;
+    }
+    if (userInput === "") {
+      continue;
+    }
+    await searchSentences(vectorStore, userInput);
+    console.log(""); // Blank line for readability
+  }
+  rl.close();
+  console.log("👋 Goodbye! Thanks for using the Semantic Search Lab.");
 }
 
 main().catch(console.error);
