@@ -1,10 +1,61 @@
-import { OpenAIEmbeddings } from "@langchain/openai";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { Document } from "@langchain/core/documents";
 import fs from "fs";
+import { CharacterTextSplitter } from "@langchain/textsplitters";
 import path from "path";
-import readline from "readline";
 import dotenv from "dotenv";
+
+// Async function to load document chunks into the vector store
+async function loadDocumentWithChunks(vectorStore, filePath, chunks) {
+  try {
+    const fileName = path.basename(filePath);
+    const totalChunks = chunks.length;
+    for (let i = 0; i < totalChunks; i++) {
+      const chunk = chunks[i];
+      // Update chunk metadata
+      chunk.metadata = {
+        ...chunk.metadata,
+        fileName: `${fileName} (Chunk ${i + 1}/${totalChunks})`,
+        createdAt: new Date().toISOString(),
+        chunkIndex: i + 1,
+      };
+      await vectorStore.addDocuments([chunk]);
+      console.log(`✅ Stored chunk ${i + 1}/${totalChunks} for '${fileName}'.`);
+    }
+    return totalChunks;
+  } catch (err) {
+    console.error(`❌ Error in loadDocumentWithChunks:`, err.message || err);
+    return 0;
+  }
+}
+
+// Async function to load EmployeeHandbook.md with fixed-size chunking
+async function load_with_fixed_size_chunking(vectorStore, filePath) {
+  try {
+    const text = fs.readFileSync(filePath, "utf-8");
+    const splitter = new CharacterTextSplitter({
+      chunkSize: 1000,
+      chunkOverlap: 0,
+      separator: " ",
+    });
+    const chunks = await splitter.createDocuments([text]);
+    const numChunks = chunks.length;
+    const avgChunkSize = (
+      chunks.reduce((sum, doc) => sum + doc.pageContent.length, 0) / numChunks
+    ).toFixed(2);
+    console.log(
+      `📄 EmployeeHandbook split into ${numChunks} chunks. Avg chunk size: ${avgChunkSize} chars.`,
+    );
+    const stored = await loadDocumentWithChunks(vectorStore, filePath, chunks);
+    return stored;
+  } catch (err) {
+    console.error(
+      `❌ Error in load_with_fixed_size_chunking:`,
+      err.message || err,
+    );
+    return 0;
+  }
+}
 
 // Load environment variables
 dotenv.config();
@@ -132,12 +183,15 @@ async function main() {
     console.log(`Document '${filePath}' loaded successfully with ID: ${docId}`);
   }
 
-  // Load EmployeeHandbook.md from workspace root
+  // Load EmployeeHandbook.md from workspace root with chunking
   const employeeHandbookPath = path.join(process.cwd(), "EmployeeHandbook.md");
-  const handbookDocId = await loadDocument(vectorStore, employeeHandbookPath);
-  if (handbookDocId) {
+  const numChunks = await load_with_fixed_size_chunking(
+    vectorStore,
+    employeeHandbookPath,
+  );
+  if (numChunks > 0) {
     console.log(
-      `Document '${employeeHandbookPath}' loaded successfully with ID: ${handbookDocId}`,
+      `EmployeeHandbook.md loaded and chunked successfully. (${numChunks} chunks)`,
     );
   }
 
