@@ -161,7 +161,23 @@ async function main() {
       // Return document ID if available, else fileName
       return document.id || fileName;
     } catch (err) {
-      console.error(`❌ Error loading file '${filePath}':`, err.message);
+      const msg = err.message || String(err);
+      if (
+        msg.includes("maximum context length") ||
+        msg.toLowerCase().includes("token")
+      ) {
+        console.error(
+          `⚠️ This document is too large to embed as a single chunk.`,
+        );
+        console.error(
+          `Token limit exceeded. The embedding model can only process up to 8,191 tokens at once.`,
+        );
+        console.error(
+          `Solution: The document needs to be split into smaller chunks.`,
+        );
+      } else {
+        console.error(`❌ Error loading file '${filePath}':`, msg);
+      }
       return null;
     }
   }
