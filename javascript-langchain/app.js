@@ -1,5 +1,8 @@
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
+import { Document } from "@langchain/core/documents";
+import fs from "fs";
+import path from "path";
 import readline from "readline";
 import dotenv from "dotenv";
 
@@ -75,6 +78,34 @@ async function main() {
     });
     if (!response.ok) {
       const err = await response.text();
+      if (response.status === 429) {
+        const retryAfter = response.headers.get("Retry-After");
+        let waitMsg = "";
+        if (retryAfter) {
+          // Retry-After can be seconds or a date string
+          const seconds = Number(retryAfter);
+          if (!isNaN(seconds) && seconds > 0) {
+            waitMsg = `Please wait ${seconds} seconds before trying again.`;
+          } else {
+            // Try to parse as date
+            const retryDate = new Date(retryAfter);
+            const now = new Date();
+            const diff = Math.ceil((retryDate - now) / 1000);
+            if (!isNaN(diff) && diff > 0) {
+              waitMsg = `Please wait ${diff} seconds (until ${retryDate.toLocaleString()}) before trying again.`;
+            }
+          }
+        }
+        if (waitMsg) {
+          console.error(
+            `⏳ Received 429 Too Many Requests from GitHub Models API. You are being rate limited. ${waitMsg}`,
+          );
+        } else {
+          console.error(
+            "⏳ Received 429 Too Many Requests from GitHub Models API. You are being rate limited. Please wait a few minutes before trying again.",
+          );
+        }
+      }
       throw new Error(`GitHub Models API error: ${response.status} ${err}`);
     }
     const data = await response.json();
@@ -92,78 +123,48 @@ async function main() {
   // Create a MemoryVectorStore instance with no initial texts
   const vectorStore = await MemoryVectorStore.fromTexts([], [], embeddings);
 
-  console.log("=== Embedding Inspector Lab ===\n");
-  console.log("Generating embeddings for three sentences...\n");
-
-  // Define the three test sentences (same as Lab 1)
-  const sentences = [
-    "The canine barked loudly.",
-    "The dog made a noise.",
-    "The electron spins rapidly.",
-    "I love eating pizza with extra cheese.",
-    "The basketball player scored a three-pointer.",
-    "Rain is forecasted for tomorrow afternoon.",
-    "JavaScript is a popular programming language.",
-    "The kitten purred softly on the couch.",
-    "Quantum mechanics explains particle behavior.",
-    "Homemade pasta tastes better than store-bought.",
-    "The soccer match ended in a tie.",
-    "Clouds are forming over the mountains.",
-    "TypeScript adds types to JavaScript.",
-    "Puppies need lots of attention and exercise.",
-    "Atoms are made of protons, neutrons, and electrons.",
-  ];
-
-  // Prepare documents with metadata
-  const now = new Date().toISOString();
-  const docs = sentences.map((sentence, idx) => ({
-    pageContent: sentence,
-    metadata: {
-      createdAt: now,
-      index: idx,
-    },
-  }));
-
-  // Add all documents to the vector store at once
-  await vectorStore.addDocuments(docs);
-
-  // Print confirmation and each sentence
-  console.log(`\n✅ Stored ${docs.length} sentences in the vector store.`);
-  docs.forEach((doc, i) => {
-    console.log(`Sentence ${i + 1}: "${doc.pageContent}"`);
-  });
-
-  // === Semantic Search Interactive Loop ===
-  console.log("\n=== Semantic Search ===");
-
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  // Promisified question for async/await
-  function askQuestion(query) {
-    return new Promise((resolve) => rl.question(query, resolve));
+  // === Loading Documents into Vector Database ===
+  console.log("=== Loading Documents into Vector Database ===");
+  // Use process.cwd() for workspace root
+  const filePath = path.join(process.cwd(), "HealthInsuranceBrochure.md");
+  const docId = await loadDocument(vectorStore, filePath);
+  if (docId) {
+    console.log(`Document '${filePath}' loaded successfully with ID: ${docId}`);
   }
 
-  while (true) {
-    const userInput = (
-      await askQuestion("Enter a search query (or 'quit' to exit): ")
-    ).trim();
-    if (
-      userInput.toLowerCase() === "quit" ||
-      userInput.toLowerCase() === "exit"
-    ) {
-      break;
-    }
-    if (userInput === "") {
-      continue;
-    }
-    await searchSentences(vectorStore, userInput);
-    console.log(""); // Blank line for readability
+  // Load EmployeeHandbook.md from workspace root
+  const employeeHandbookPath = path.join(process.cwd(), "EmployeeHandbook.md");
+  const handbookDocId = await loadDocument(vectorStore, employeeHandbookPath);
+  if (handbookDocId) {
+    console.log(
+      `Document '${employeeHandbookPath}' loaded successfully with ID: ${handbookDocId}`,
+    );
   }
-  rl.close();
-  console.log("👋 Goodbye! Thanks for using the Semantic Search Lab.");
+
+  // Async function to load a document from file and add to vector store
+  async function loadDocument(vectorStore, filePath) {
+    try {
+      const text = fs.readFileSync(filePath, "utf-8");
+      const fileName = path.basename(filePath);
+      const createdAt = new Date().toISOString();
+      const document = new Document({
+        pageContent: text,
+        metadata: {
+          fileName,
+          createdAt,
+        },
+      });
+      await vectorStore.addDocuments([document]);
+      console.log(
+        `✅ Loaded '${fileName}' (${text.length} chars) into vector store.`,
+      );
+      // Return document ID if available, else fileName
+      return document.id || fileName;
+    } catch (err) {
+      console.error(`❌ Error loading file '${filePath}':`, err.message);
+      return null;
+    }
+  }
 }
 
 main().catch(console.error);
