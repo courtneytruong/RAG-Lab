@@ -34,7 +34,7 @@ async function load_with_fixed_size_chunking(vectorStore, filePath) {
   try {
     const text = fs.readFileSync(filePath, "utf-8");
     const splitter = new CharacterTextSplitter({
-      chunkSize: 1000,
+      chunkSize: 7000,
       chunkOverlap: 0,
       separator: " ",
     });
